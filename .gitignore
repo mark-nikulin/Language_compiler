@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Виртуальные окружения
+.venv/
+venv/
+env/
+
+# Редакторы и ОС
+.vscode/
+.idea/
+*.swp
+.DS_Store

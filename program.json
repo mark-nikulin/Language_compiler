@@ -1,0 +1,13 @@
+{
+  "seq": {
+    "left": { "read": "a" },
+    "right": {
+      "seq": {
+        "left": { "read": "b" },
+        "right": {
+          "write": { "binop": "+", "left": { "var": "a" }, "right": { "var": "b" } }
+        }
+      }
+    }
+  }
+}
