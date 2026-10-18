@@ -3,7 +3,6 @@
 # Числа поддерживаются только целые: в AST языка L0 других нет.
 
 from .errors import JsonError, where
-from .stack import Stack
 
 
 def is_digit(c):
@@ -116,7 +115,6 @@ class Reader:
         return -value if negative else value
 
     def read_key(self):
-        # Ключ объекта вместе с двоеточием: "key" :
         if self.peek() != '"':
             self.error("object key expected")
         key = self.read_string()
@@ -134,7 +132,7 @@ class Reader:
 
 def parse_json(text):
     r = Reader(text)
-    open_frames = Stack("JSON stack")
+    open_frames = []
     r.skip_spaces()
     while True:
         # Шаг 1: начать очередное значение.
@@ -149,7 +147,7 @@ def parse_json(text):
             else:
                 frame = Frame({}, True)
                 frame.key = r.read_key()
-                open_frames.push(frame)
+                open_frames.append(frame)
                 continue
         elif c == "[":
             r.pos += 1
@@ -158,7 +156,7 @@ def parse_json(text):
                 r.pos += 1
                 value = []
             else:
-                open_frames.push(Frame([], False))
+                open_frames.append(Frame([], False))
                 continue
         elif c == '"':
             value = r.read_string()
@@ -176,12 +174,12 @@ def parse_json(text):
         # Шаг 2: значение готово. Кладём его в родителя и закрываем
         # все контейнеры, которые на этом закончились.
         while True:
-            if open_frames.is_empty():
+            if not open_frames:
                 r.skip_spaces()
                 if r.pos != len(text):
                     r.error("end of input expected")
                 return value
-            frame = open_frames.peek()
+            frame = open_frames[-1]
             if frame.is_object:
                 frame.value[frame.key] = value
             else:

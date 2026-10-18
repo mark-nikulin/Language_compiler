@@ -1,5 +1,4 @@
-# Ошибки делятся на два вида:
-#   L0Error     - ошибка самой программы L0 (ввод, выполнение). Текст дословно как у эталона.
+#   L0Error - ошибка самой программы L0 (ввод, выполнение). Текст печатается как есть.
 #   FormatError - битые входные данные (JSON, AST, SM-код). Это ошибка инструмента, код возврата 2.
 
 
@@ -26,10 +25,6 @@ class SmError(FormatError):
 
 
 class AsmError(FormatError):
-    pass
-
-
-class StackError(FormatError):
     pass
 
 

@@ -1,6 +1,3 @@
-# Узлы AST языка L0.
-
-
 # Выражения
 
 class Const:
@@ -26,6 +23,35 @@ class BinOp:
         self.code = code
         self.left = left
         self.right = right
+
+
+class ArrayLit:
+    __slots__ = ("items",)
+
+    def __init__(self, items):
+        self.items = items
+
+
+class Elem:
+    __slots__ = ("array", "index")
+
+    def __init__(self, array, index):
+        self.array = array
+        self.index = index
+
+
+class Length:
+    __slots__ = ("array",)
+
+    def __init__(self, array):
+        self.array = array
+
+
+class StrLit:
+    __slots__ = ("text",)
+
+    def __init__(self, text):
+        self.text = text
 
 
 # Операторы
@@ -71,6 +97,16 @@ class If:
         self.cond = cond
         self.then = then
         self.else_ = else_
+
+
+class SetElem:
+    # dst[index] = value
+    __slots__ = ("dst", "index", "value")
+
+    def __init__(self, dst, index, value):
+        self.dst = dst
+        self.index = index
+        self.value = value
 
 
 class While:

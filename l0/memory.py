@@ -6,13 +6,13 @@ from .errors import L0Error
 
 class Memory:
     def __init__(self, names):
-        self.names = list(names)  # номер ячейки -> имя переменной
+        self.names = list(names)
         self.values = [0] * len(names)
         self.defined = [False] * len(names)
 
     def load(self, slot):
         if not self.defined[slot]:
-            raise L0Error('L0.State.Undefined_variable("%s")' % self.names[slot])
+            raise L0Error('ERROR: variable "%s" is undefined' % self.names[slot])
         return self.values[slot]
 
     def store(self, slot, value):

@@ -1,7 +1,6 @@
 # Ассемблер: символьный SM-код -> собранная программа с числовыми аргументами.
 #   проход 1: метка -> адрес (индекс инструкции LABEL);
 #   проход 2: переменная -> номер ячейки, метка -> адрес, текст операции -> её номер.
-# Словари здесь - таблицы символов времени сборки. При выполнении их уже нет.
 
 from .arith import op_code
 from .errors import AsmError
@@ -10,7 +9,7 @@ from .opcodes import Instr, Opcode
 
 class Program:
     def __init__(self, code, names):
-        self.code = code  # список Instr с числовыми аргументами
+        self.code = code
         self.names = names  # номер ячейки -> имя переменной (для текста ошибок)
         self.memory_size = len(names)
 

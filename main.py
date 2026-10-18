@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# Командная строка. Коды возврата: 0 - успех, 1 - ошибка программы L0,
+# Командная строка. Коды возврата: 0 - нормальное завершение, 1 - ошибка программы L0,
 # 2 - битый AST, JSON или SM-код, неверный вызов или файл не читается,
 # 3 - check нашёл расхождение.
 
@@ -11,15 +10,17 @@ from l0.ast_interp import run_ast
 from l0.compiler import compile_program
 from l0.errors import FormatError
 from l0.json_reader import parse_json
-from l0.opcodes import format_program, parse_sm
+from l0.opcodes import format_program
 from l0.sm import run_sm
+from l0.sm_json import format_program_json, parse_sm_any
 
 USAGE = """usage:
-  main.py compile    program.json
+  main.py compile      program.json     (SM code as JSON)
+  main.py compile-text program.json     (SM code as text)
   main.py run-sm     program.json [INPUT]
   main.py run-ast    program.json [INPUT]
   main.py check      program.json [INPUT]
-  main.py run-smfile code.sm      [INPUT]
+  main.py run-smfile code.json    [INPUT]   (JSON or text SM code)
 Without INPUT the input is read from stdin."""
 
 
@@ -52,6 +53,9 @@ def main(argv):
     path = argv[2]
     try:
         if command == "compile":
+            print(format_program_json(compile_program(load_ast(path))))
+            return 0
+        if command == "compile-text":
             print(format_program(compile_program(load_ast(path))))
             return 0
         if command == "run-ast":
@@ -61,7 +65,7 @@ def main(argv):
             program = assemble(compile_program(load_ast(path)))
             return show(*run_sm(program, input_text(argv)))
         if command == "run-smfile":
-            program = assemble(parse_sm(read_file(path)))
+            program = assemble(parse_sm_any(read_file(path)))
             return show(*run_sm(program, input_text(argv)))
         if command == "check":
             tree = load_ast(path)

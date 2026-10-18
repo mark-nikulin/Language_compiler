@@ -1,27 +1,23 @@
 # Стековая машина: цикл fetch-execute по собранной программе.
-# Повторяет структуру SM из sm.cpp: insts, ip, stack, exec() со switch по опкоду.
-# Отличия от sm.cpp:
-#   - init() и resolve_label() вынесены в ассемблер: метки превращаются в адреса
-#     до запуска, поэтому JMP/JZ/JNZ не ищут метку на каждом переходе;
-#   - environment - не словарь по имени, а Memory с ячейками по номеру;
-#   - LD неинициализированной переменной - ошибка (в sm.cpp получится 0),
-#     деление на 0 - ошибка Division_by_zero (в C++ это неопределённое поведение).
+# Метки уже заменены адресами, переменные лежат в ячейках по номеру, строки и массивы - в куче
+# (на стеке и в переменных хранятся указатели).
 
-from .arith import apply_binop, wrap
+from .arith import wrap
 from .config import KEEP_OUTPUT_ON_ERROR
 from .errors import L0Error, SmError
+from .heap import Heap
 from .input_reader import parse_input
 from .memory import Memory
 from .opcodes import Opcode
-from .stack import Stack
 
 
 class SM:
     def __init__(self, program, inputs):
         self.insts = program.code
-        self.ip = 0  # адрес следующей инструкции
-        self.stack = Stack("SM stack")
+        self.ip = 0
+        self.stack = []
         self.memory = Memory(program.names)
+        self.heap = Heap()
         self.inputs = inputs
         self.output = []
 
@@ -29,40 +25,63 @@ class SM:
         insts = self.insts
         stack = self.stack
         memory = self.memory
-        while self.ip < len(insts):
-            instr = insts[self.ip]
-            self.ip += 1
-            op = instr.op
-            if op == Opcode.LD:
-                stack.push(memory.load(instr.arg))
-            elif op == Opcode.ST:
-                memory.store(instr.arg, stack.pop())
-            elif op == Opcode.CONST:
-                stack.push(wrap(instr.arg))
-            elif op == Opcode.BINOP:
-                y = stack.pop()  # правый операнд лежит сверху
-                x = stack.pop()
-                stack.push(apply_binop(instr.arg, x, y))
-            elif op == Opcode.JNZ:
-                if stack.pop() != 0:
+        heap = self.heap
+        try:
+            while self.ip < len(insts):
+                instr = insts[self.ip]
+                self.ip += 1
+                op = instr.op
+                if op == Opcode.LD:
+                    stack.append(memory.load(instr.arg))
+                elif op == Opcode.ST:
+                    memory.store(instr.arg, stack.pop())
+                elif op == Opcode.CONST:
+                    stack.append(wrap(instr.arg))
+                elif op == Opcode.BINOP:
+                    y = stack.pop()  # правый операнд лежит сверху
+                    x = stack.pop()
+                    stack.append(heap.binop(instr.arg, x, y))
+                elif op == Opcode.JNZ:
+                    if heap.as_int(stack.pop()) != 0:
+                        self.ip = instr.arg
+                elif op == Opcode.JZ:
+                    if heap.as_int(stack.pop()) == 0:
+                        self.ip = instr.arg
+                elif op == Opcode.JMP:
                     self.ip = instr.arg
-            elif op == Opcode.JZ:
-                if stack.pop() == 0:
-                    self.ip = instr.arg
-            elif op == Opcode.JMP:
-                self.ip = instr.arg
-            elif op == Opcode.LABEL:
-                pass
-            elif op == Opcode.READ:
-                stack.push(wrap(self.inputs.read()))
-            elif op == Opcode.WRITE:
-                self.output.append(stack.pop())
-            else:
-                raise SmError("unknown opcode %d at address %d" % (op, self.ip - 1))
+                elif op == Opcode.LABEL:
+                    pass
+                elif op == Opcode.READ:
+                    stack.append(wrap(self.inputs.read()))
+                elif op == Opcode.WRITE:
+                    self.output.append(heap.printable(stack.pop()))
+                elif op == Opcode.STRING:
+                    stack.append(heap.new_string(instr.arg.encode("utf-8")))
+                elif op == Opcode.ARRAY:
+                    items = []
+                    i = 0
+                    while i < instr.arg:
+                        items.append(stack.pop())
+                        i += 1
+                    items.reverse()
+                    stack.append(heap.new_array(items))
+                elif op == Opcode.ALOAD:
+                    index = stack.pop()
+                    stack.append(heap.elem(stack.pop(), index))
+                elif op == Opcode.ASTORE:
+                    value = stack.pop()
+                    index = stack.pop()
+                    heap.set_elem(stack.pop(), index, value)
+                elif op == Opcode.ALEN:
+                    stack.append(heap.length(stack.pop()))
+                else:
+                    raise SmError("unknown opcode %d at address %d" % (op, self.ip - 1))
+        except IndexError:
+            raise SmError("stack underflow at address %d" % (self.ip - 1))
 
 
 def run_sm(program, input_text):
-    # Возвращает (выведенные числа, сообщение об ошибке или None).
+    # Возвращает (выведенные значения, сообщение об ошибке или None).
     machine = SM(program, None)
     try:
         machine.inputs = parse_input(input_text)
