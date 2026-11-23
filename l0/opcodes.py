@@ -1,3 +1,5 @@
+import json
+
 from .arith import op_code
 from .errors import JsonError, SmError, where
 from .json_reader import parse_json
@@ -19,13 +21,22 @@ class Opcode:
     ALOAD = 12
     ASTORE = 13
     ALEN = 14
+    SEXP = 15
+    ENTER = 16
+    LEAVE = 17
+    CALL = 18
+    RETURN = 19
+    END = 20
+    PRECALL = 21
+    RESOLVE = 22
 
     NAMES = ["READ", "WRITE", "LD", "ST", "CONST", "BINOP", "LABEL", "JMP", "JZ", "JNZ", "STRING", "ARRAY", "ALOAD", "ASTORE",
-             "ALEN"]
+             "ALEN", "SEXP", "ENTER", "LEAVE", "CALL", "RETURN", "END", "PRECALL", "RESOLVE"]
 
 
 def has_arg(op):
-    return op not in (Opcode.READ, Opcode.WRITE, Opcode.ALOAD, Opcode.ASTORE, Opcode.ALEN)
+    return op not in (Opcode.READ, Opcode.WRITE, Opcode.ALOAD, Opcode.ASTORE, Opcode.ALEN,
+                      Opcode.LEAVE, Opcode.RETURN, Opcode.END)
 
 
 def opcode_by_name(name):
@@ -38,9 +49,6 @@ def opcode_by_name(name):
 
 
 class Instr:
-    # До ассемблера arg - имя переменной, метка, число или текст операции.
-    # После ассемблера arg - номер ячейки, адрес или номер операции;
-    # у CONST число не меняется, у LABEL arg становится None.
     __slots__ = ("op", "arg")
 
     def __init__(self, op, arg=None):
@@ -77,7 +85,12 @@ def quote_string(text):
 
 def format_instr(instr):
     name = Opcode.NAMES[instr.op]
-    if instr.op == Opcode.STRING:
+    if instr.op in (Opcode.ENTER, Opcode.CALL, Opcode.PRECALL) or (instr.op in (Opcode.LD, Opcode.ST)
+                                                  and isinstance(instr.arg, (tuple, list))):
+        return "%s %s" % (name, json.dumps(instr.arg, ensure_ascii=False))
+    if instr.op == Opcode.SEXP:
+        return "%s %s %d" % (name, quote_string(instr.arg[0]), instr.arg[1])
+    if instr.op in (Opcode.STRING, Opcode.RESOLVE):
         return "%s %s" % (name, quote_string(instr.arg))
     if has_arg(instr.op):
         return "%s %s" % (name, instr.arg)
@@ -92,7 +105,6 @@ def format_program(instrs):
 
 
 def parse_int(word):
-    # Целое из строки: [-] цифры. None, если это не число.
     i = 0
     negative = False
     if i < len(word) and word[i] == "-":
@@ -111,7 +123,6 @@ def parse_int(word):
 
 
 def split_words(line):
-    # Разбить строку на слова по пробелам, табам и \r (строки с CRLF).
     words = []
     current = []
     for c in line:
@@ -127,7 +138,6 @@ def split_words(line):
 
 
 def strip_comment(line):
-    # Отрезать "#"-комментарий; "#" внутри строки в кавычках комментарием не считается.
     in_string = False
     i = 0
     while i < len(line):
@@ -145,8 +155,42 @@ def strip_comment(line):
     return line
 
 
+def validate_structured_arg(op, arg, at):
+    def name(value):
+        return isinstance(value, str) and bool(value)
+
+    def names(value):
+        return (isinstance(value, list) and all(name(item) for item in value)
+                and len(set(value)) == len(value))
+
+    def number(value):
+        return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+    if op in (Opcode.LD, Opcode.ST):
+        if (isinstance(arg, list) and len(arg) == 2 and arg[0] == "NAME" and name(arg[1])):
+            return tuple(arg)
+        if (isinstance(arg, list) and len(arg) == 3 and arg[0] in ("ARG", "LOC")
+                and number(arg[1]) and number(arg[2])):
+            return tuple(arg)
+    elif op in (Opcode.CALL, Opcode.PRECALL):
+        if isinstance(arg, list) and len(arg) == 2 and name(arg[0]) and number(arg[1]):
+            return tuple(arg)
+    elif op == Opcode.ENTER and isinstance(arg, dict):
+        variables = arg.get("vars")
+        functions = arg.get("functions")
+        if names(variables) and isinstance(functions, list):
+            seen = set()
+            for function in functions:
+                if (not isinstance(function, list) or len(function) != 3 or not name(function[0])
+                        or not name(function[1]) or not names(function[2]) or function[0] in seen):
+                    break
+                seen.add(function[0])
+            else:
+                return {"vars": variables, "functions": functions}
+    raise SmError("%s: invalid argument for %s" % (at, Opcode.NAMES[op]))
+
+
 def parse_sm(text):
-    # Текст SM: одна инструкция на строку, "#" - комментарий до конца строки.
     instrs = []
     line_start = 0
     while line_start <= len(text):
@@ -162,14 +206,40 @@ def parse_sm(text):
             op = opcode_by_name(words[0])
             if op < 0:
                 raise SmError('SM: unknown instruction "%s" at %s' % (words[0], at))
-            if op == Opcode.STRING:
+            if op in (Opcode.ENTER, Opcode.CALL, Opcode.PRECALL) or (op in (Opcode.LD, Opcode.ST)
+                                                    and line[line.index(words[0]) + len(words[0]):].lstrip().startswith("[")):
+                rest = line[line.index(words[0]) + len(words[0]):].strip()
+                try:
+                    arg = parse_json(rest)
+                except JsonError:
+                    raise SmError("SM: invalid argument after %s at %s" % (words[0], at))
+                instrs.append(Instr(op, validate_structured_arg(op, arg, "SM at %s" % at)))
+            elif op == Opcode.SEXP:
+                rest = line[line.index(words[0]) + len(words[0]):].strip()
+                end = 1
+                while end < len(rest):
+                    if rest[end] == "\\":
+                        end += 2
+                    elif rest[end] == '"':
+                        break
+                    else:
+                        end += 1
+                try:
+                    tag = parse_json(rest[:end + 1])
+                except JsonError:
+                    tag = None
+                count = parse_int(rest[end + 1:].strip())
+                if not isinstance(tag, str) or not tag or count is None or count < 0:
+                    raise SmError("SM: quoted tag and nonnegative arity expected after SEXP at %s" % at)
+                instrs.append(Instr(op, (tag, count)))
+            elif op in (Opcode.STRING, Opcode.RESOLVE):
                 rest = line[line.index(words[0]) + len(words[0]):].strip()
                 try:
                     arg = parse_json(rest)
                 except JsonError:
                     arg = None
                 if not isinstance(arg, str):
-                    raise SmError("SM: quoted string expected after STRING at %s" % at)
+                    raise SmError("SM: quoted string expected after %s at %s" % (words[0], at))
                 instrs.append(Instr(op, arg))
             elif not has_arg(op):
                 if len(words) != 1:

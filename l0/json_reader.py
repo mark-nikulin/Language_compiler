@@ -1,6 +1,3 @@
-# Разбор JSON без рекурсии.
-# Открытые, ещё не закрытые объекты и массивы лежат на явном стеке.
-# Числа поддерживаются только целые: в AST языка L0 других нет.
 
 from .errors import JsonError, where
 
@@ -24,7 +21,6 @@ def hex_value(c):
 
 
 class Frame:
-    # Открытый контейнер: сам объект или массив и ключ, под который ляжет следующее значение.
     __slots__ = ("value", "is_object", "key")
 
     def __init__(self, value, is_object):
@@ -42,7 +38,6 @@ class Reader:
         raise JsonError("JSON: %s at %s" % (what, where(self.text, self.pos)))
 
     def peek(self):
-        # Текущий символ или "" в конце текста.
         if self.pos < len(self.text):
             return self.text[self.pos]
         return ""
@@ -135,8 +130,6 @@ def parse_json(text):
     open_frames = []
     r.skip_spaces()
     while True:
-        # Шаг 1: начать очередное значение.
-        # Контейнер кладём на стек и сразу идём читать его первый элемент.
         c = r.peek()
         if c == "{":
             r.pos += 1
@@ -171,8 +164,6 @@ def parse_json(text):
         else:
             r.error("value expected")
 
-        # Шаг 2: значение готово. Кладём его в родителя и закрываем
-        # все контейнеры, которые на этом закончились.
         while True:
             if not open_frames:
                 r.skip_spaces()
@@ -191,10 +182,10 @@ def parse_json(text):
                 r.skip_spaces()
                 if frame.is_object:
                     frame.key = r.read_key()
-                break  # читаем следующий элемент того же контейнера
+                break
             closer = "}" if frame.is_object else "]"
             if c != closer:
                 r.error("',' or '%s' expected" % closer)
             r.pos += 1
             open_frames.pop()
-            value = frame.value  # закрытый контейнер сам стал готовым значением
+            value = frame.value

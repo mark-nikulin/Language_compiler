@@ -1,0 +1,189 @@
+{
+  "seq": {
+    "left": {
+      "assn": {
+        "dst": "xs",
+        "src": {
+          "list": [
+            {
+              "const": 1
+            },
+            {
+              "const": 2
+            },
+            {
+              "const": 3
+            },
+            {
+              "const": 4
+            },
+            {
+              "const": 5
+            }
+          ]
+        }
+      }
+    },
+    "right": {
+      "seq": {
+        "left": {
+          "assn": {
+            "dst": "cont",
+            "src": {
+              "const": 1
+            }
+          }
+        },
+        "right": {
+          "seq": {
+            "left": {
+              "assn": {
+                "dst": "depth",
+                "src": {
+                  "const": 0
+                }
+              }
+            },
+            "right": {
+              "seq": {
+                "left": {
+                  "while": {
+                    "cond": {
+                      "var": "cont"
+                    },
+                    "body": {
+                      "switch": {
+                        "expr": {
+                          "var": "xs"
+                        },
+                        "branches": [
+                          {
+                            "pattern": {
+                              "list": []
+                            },
+                            "body": {
+                              "seq": {
+                                "left": {
+                                  "write": {
+                                    "string": "nil"
+                                  }
+                                },
+                                "right": {
+                                  "assn": {
+                                    "dst": "cont",
+                                    "src": {
+                                      "const": 0
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "pattern": {
+                              "cons": [
+                                {
+                                  "var": "x"
+                                },
+                                {
+                                  "var": "ys"
+                                }
+                              ]
+                            },
+                            "body": {
+                              "seq": {
+                                "left": {
+                                  "write": {
+                                    "string": "cons ("
+                                  }
+                                },
+                                "right": {
+                                  "seq": {
+                                    "left": {
+                                      "write": {
+                                        "var": "x"
+                                      }
+                                    },
+                                    "right": {
+                                      "seq": {
+                                        "left": {
+                                          "write": {
+                                            "string": ", "
+                                          }
+                                        },
+                                        "right": {
+                                          "seq": {
+                                            "left": {
+                                              "assn": {
+                                                "dst": "depth",
+                                                "src": {
+                                                  "binop": "+",
+                                                  "left": {
+                                                    "var": "depth"
+                                                  },
+                                                  "right": {
+                                                    "const": 1
+                                                  }
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "assn": {
+                                                "dst": "xs",
+                                                "src": {
+                                                  "var": "ys"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                "right": {
+                  "while": {
+                    "cond": {
+                      "var": "depth"
+                    },
+                    "body": {
+                      "seq": {
+                        "left": {
+                          "write": {
+                            "string": ")"
+                          }
+                        },
+                        "right": {
+                          "assn": {
+                            "dst": "depth",
+                            "src": {
+                              "binop": "-",
+                              "left": {
+                                "var": "depth"
+                              },
+                              "right": {
+                                "const": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

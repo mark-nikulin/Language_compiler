@@ -1,15 +1,12 @@
 from .errors import L0Error
 
-# Разрядность целых. None - неограниченные целые Python.
-# 63 - native int в OCaml, 32 - int32. При переполнении значение "заворачивается".
 INT_BITS = 63
 
-OR, AND, EQ, NE, LE, LT, GE, GT, ADD, SUB, MUL, DIV, MOD = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
-OP_NAMES = ["!!", "&&", "==", "!=", "<=", "<", ">=", ">", "+", "-", "*", "/", "%"]
+OR, AND, EQ, NE, LE, LT, GE, GT, ADD, SUB, MUL, DIV, MOD, CONS = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
+OP_NAMES = ["!!", "&&", "==", "!=", "<=", "<", ">=", ">", "+", "-", "*", "/", "%", ":"]
 
 
 def normalize_op(op):
-    # Минус может прийти как U+2212 или U+2013 - приводим к обычному "-".
     chars = []
     for c in op:
         if c == "−" or c == "–":
@@ -20,7 +17,6 @@ def normalize_op(op):
 
 
 def op_code(name):
-    # Номер операции по тексту или -1, если такой операции нет.
     i = 0
     while i < len(OP_NAMES):
         if OP_NAMES[i] == name:
@@ -38,7 +34,6 @@ def wrap(n):
 
 
 def div(a, b):
-    # Деление с округлением к нулю. В Python // округляет вниз.
     if b == 0:
         raise L0Error("Division_by_zero")
     q = abs(a) // abs(b)
@@ -46,12 +41,10 @@ def div(a, b):
 
 
 def mod(a, b):
-    # Остаток со знаком делимого: a = b * div(a, b) + mod(a, b).
     return a - b * div(a, b)
 
 
 def apply_binop(code, x, y):
-    # x - левый операнд, y - правый. Оба уже вычислены: короткого замыкания нет.
     if code == ADD:
         return wrap(x + y)
     elif code == SUB:

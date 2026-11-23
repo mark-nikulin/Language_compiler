@@ -1,0 +1,232 @@
+{
+  "seq": {
+    "left": {
+      "assn": {
+        "dst": "xs",
+        "src": {
+          "sexp": {
+            "tag": "Cons",
+            "args": [
+              {
+                "const": 1
+              },
+              {
+                "sexp": {
+                  "tag": "Cons",
+                  "args": [
+                    {
+                      "const": 2
+                    },
+                    {
+                      "sexp": {
+                        "tag": "Cons",
+                        "args": [
+                          {
+                            "const": 3
+                          },
+                          {
+                            "sexp": {
+                              "tag": "Cons",
+                              "args": [
+                                {
+                                  "const": 4
+                                },
+                                {
+                                  "sexp": {
+                                    "tag": "Cons",
+                                    "args": [
+                                      {
+                                        "const": 5
+                                      },
+                                      {
+                                        "sexp": {
+                                          "tag": "Nil",
+                                          "args": []
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "right": {
+      "seq": {
+        "left": {
+          "assn": {
+            "dst": "cont",
+            "src": {
+              "const": 1
+            }
+          }
+        },
+        "right": {
+          "seq": {
+            "left": {
+              "assn": {
+                "dst": "depth",
+                "src": {
+                  "const": 0
+                }
+              }
+            },
+            "right": {
+              "seq": {
+                "left": {
+                  "while": {
+                    "cond": {
+                      "var": "cont"
+                    },
+                    "body": {
+                      "switch": {
+                        "expr": {
+                          "var": "xs"
+                        },
+                        "branches": [
+                          {
+                            "pattern": {
+                              "sexp": {
+                                "tag": "Nil",
+                                "args": []
+                              }
+                            },
+                            "body": {
+                              "seq": {
+                                "left": {
+                                  "write": {
+                                    "string": "nil"
+                                  }
+                                },
+                                "right": {
+                                  "assn": {
+                                    "dst": "cont",
+                                    "src": {
+                                      "const": 0
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "pattern": {
+                              "sexp": {
+                                "tag": "Cons",
+                                "args": [
+                                  {
+                                    "var": "x"
+                                  },
+                                  {
+                                    "var": "ys"
+                                  }
+                                ]
+                              }
+                            },
+                            "body": {
+                              "seq": {
+                                "left": {
+                                  "write": {
+                                    "string": "cons ("
+                                  }
+                                },
+                                "right": {
+                                  "seq": {
+                                    "left": {
+                                      "write": {
+                                        "var": "x"
+                                      }
+                                    },
+                                    "right": {
+                                      "seq": {
+                                        "left": {
+                                          "write": {
+                                            "string": ", "
+                                          }
+                                        },
+                                        "right": {
+                                          "seq": {
+                                            "left": {
+                                              "assn": {
+                                                "dst": "depth",
+                                                "src": {
+                                                  "binop": "+",
+                                                  "left": {
+                                                    "var": "depth"
+                                                  },
+                                                  "right": {
+                                                    "const": 1
+                                                  }
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "assn": {
+                                                "dst": "xs",
+                                                "src": {
+                                                  "var": "ys"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                "right": {
+                  "while": {
+                    "cond": {
+                      "var": "depth"
+                    },
+                    "body": {
+                      "seq": {
+                        "left": {
+                          "write": {
+                            "string": ")"
+                          }
+                        },
+                        "right": {
+                          "assn": {
+                            "dst": "depth",
+                            "src": {
+                              "binop": "-",
+                              "left": {
+                                "var": "depth"
+                              },
+                              "right": {
+                                "const": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

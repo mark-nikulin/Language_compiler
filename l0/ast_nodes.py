@@ -1,4 +1,3 @@
-# Выражения
 
 class Const:
     __slots__ = ("value",)
@@ -15,7 +14,6 @@ class Var:
 
 
 class BinOp:
-    # op - текст операции ("+"), code - её номер из arith.py
     __slots__ = ("op", "code", "left", "right")
 
     def __init__(self, op, code, left, right):
@@ -30,6 +28,64 @@ class ArrayLit:
 
     def __init__(self, items):
         self.items = items
+
+
+class SexpLit:
+    __slots__ = ("tag", "items")
+
+    def __init__(self, tag, items):
+        self.tag = tag
+        self.items = items
+
+
+class Call:
+    __slots__ = ("name", "args")
+
+    def __init__(self, name, args):
+        self.name = name
+        self.args = args
+
+
+class Function:
+    __slots__ = ("name", "params", "body")
+
+    def __init__(self, name, params, body):
+        self.name = name
+        self.params = params
+        self.body = body
+
+
+class Scope:
+    __slots__ = ("variables", "functions", "body")
+
+    def __init__(self, variables, functions, body):
+        self.variables = variables
+        self.functions = functions
+        self.body = body
+
+
+class Return:
+    __slots__ = ("expr",)
+
+    def __init__(self, expr):
+        self.expr = expr
+
+
+class Pattern:
+    __slots__ = ("kind", "value", "items")
+
+    def __init__(self, kind, value=None, items=None):
+        self.kind = kind
+        self.value = value
+        self.items = items or []
+
+
+class Switch:
+    __slots__ = ("expr", "branches")
+
+    def __init__(self, expr, branches):
+        self.expr = expr
+        self.branches = branches
 
 
 class Elem:
@@ -54,7 +110,6 @@ class StrLit:
         self.text = text
 
 
-# Операторы
 
 class Skip:
     __slots__ = ()
@@ -100,7 +155,6 @@ class If:
 
 
 class SetElem:
-    # dst[index] = value
     __slots__ = ("dst", "index", "value")
 
     def __init__(self, dst, index, value):

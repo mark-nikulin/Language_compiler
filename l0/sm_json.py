@@ -1,17 +1,21 @@
-# SM-код в формате JSON: массив инструкций.
-#   без аргумента - строка:   "READ", "WRITE"
-#   с аргументом - объект:    { "ST": "a" }, { "CONST": 0 }, { "BINOP": "+" }, { "JMP": "L_end_1" }
+
+import json
 
 from .arith import normalize_op, op_code
 from .errors import SmError
 from .json_reader import parse_json
-from .opcodes import Instr, Opcode, has_arg, opcode_by_name, parse_sm, quote_string
+from .opcodes import Instr, Opcode, has_arg, opcode_by_name, parse_sm, quote_string, validate_structured_arg
 
 
 def format_json_instr(instr):
     name = Opcode.NAMES[instr.op]
     if not has_arg(instr.op):
         return quote_string(name)
+    if instr.op in (Opcode.ENTER, Opcode.CALL, Opcode.PRECALL) or (instr.op in (Opcode.LD, Opcode.ST)
+                                                  and isinstance(instr.arg, (tuple, list))):
+        return '{ "%s": %s }' % (name, json.dumps(instr.arg, ensure_ascii=False))
+    if instr.op == Opcode.SEXP:
+        return '{ "%s": [%s, %d] }' % (name, quote_string(instr.arg[0]), instr.arg[1])
     if instr.op == Opcode.CONST or instr.op == Opcode.ARRAY:
         return '{ "%s": %d }' % (name, instr.arg)
     return '{ "%s": %s }' % (name, quote_string(instr.arg))
@@ -44,7 +48,14 @@ def instr_from_json(item, index):
         raise SmError('%s: unknown instruction "%s"' % (at, name))
     if not has_arg(op):
         raise SmError("%s: %s takes no argument" % (at, name))
-    if op == Opcode.CONST or op == Opcode.ARRAY:
+    if op in (Opcode.ENTER, Opcode.CALL, Opcode.PRECALL) or (op in (Opcode.LD, Opcode.ST) and isinstance(arg, list)):
+        arg = validate_structured_arg(op, arg, at)
+    elif op == Opcode.SEXP:
+        if (not isinstance(arg, list) or len(arg) != 2 or not isinstance(arg[0], str)
+                or not arg[0] or not isinstance(arg[1], int) or isinstance(arg[1], bool) or arg[1] < 0):
+            raise SmError("%s: [tag, nonnegative arity] expected after SEXP" % at)
+        arg = (arg[0], arg[1])
+    elif op == Opcode.CONST or op == Opcode.ARRAY:
         if not isinstance(arg, int) or isinstance(arg, bool) or (op == Opcode.ARRAY and arg < 0):
             raise SmError("%s: integer expected after %s" % (at, name))
     else:
@@ -70,7 +81,6 @@ def parse_sm_json(text):
 
 
 def parse_sm_any(text):
-    # JSON, если первый непробельный символ "[", иначе обычный текст SM.
     i = 0
     while i < len(text) and text[i] in " \t\r\n":
         i += 1

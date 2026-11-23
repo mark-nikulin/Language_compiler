@@ -1,12 +1,16 @@
-# Куча L0: значение - целое или указатель Ptr на коробку (строку или массив).
-#   строка  - bytearray, элементы - байты (числа 0..255);
-#   массив  - список значений (целые и указатели).
-# Копирование указателя не копирует содержимое: переменные могут делить один массив.
 
-from .arith import EQ, GE, GT, LE, LT, NE, apply_binop
+from .arith import CONS, EQ, GE, GT, LE, LT, NE, apply_binop
 from .errors import L0Error
 
-INT, STR, ARR = 0, 1, 2
+INT, STR, ARR, SEXP = 0, 1, 2, 3
+
+
+class Sexp:
+    __slots__ = ("tag", "items")
+
+    def __init__(self, tag, items):
+        self.tag = tag
+        self.items = list(items)
 
 
 class Ptr:
@@ -34,10 +38,16 @@ class Heap:
     def new_array(self, items):
         return self.alloc(list(items))
 
+    def new_sexp(self, tag, items):
+        return self.alloc(Sexp(tag, items))
+
     def kind(self, value):
         if not is_ptr(value):
             return INT
-        return STR if isinstance(self.boxes[value.addr], bytearray) else ARR
+        box = self.boxes[value.addr]
+        if isinstance(box, bytearray):
+            return STR
+        return SEXP if isinstance(box, Sexp) else ARR
 
     def as_int(self, value):
         if is_ptr(value):
@@ -47,7 +57,8 @@ class Heap:
     def need_box(self, value, wording):
         if not is_ptr(value):
             raise L0Error('ERROR: array/string value expected but "%s" %s' % (self.show(value), wording))
-        return self.boxes[value.addr]
+        box = self.boxes[value.addr]
+        return box.items if isinstance(box, Sexp) else box
 
     def check_index(self, index, size):
         if index < 0 or index >= size:
@@ -73,82 +84,118 @@ class Heap:
         return len(self.need_box(array, "given"))
 
     def printable(self, value):
-        # Что попадает в Output: число как есть, остальное - готовым текстом.
         return self.show(value) if is_ptr(value) else value
 
     def show(self, value):
-        # Текст значения: [1; x; [2]]. Строки без кавычек. Вложенность - стеком, без рекурсии.
         out = []
-        todo = []
-        todo.append((True, value))
+        todo = [("value", value)]
+        active = set()
         while todo:
-            is_value, item = todo.pop()
-            if not is_value:
+            action, item = todo.pop()
+            if action == "text":
                 out.append(item)
+            elif action == "leave":
+                active.remove(item)
             elif not is_ptr(item):
                 out.append(str(item))
+            elif item.addr in active:
+                out.append("<cycle>")
             else:
                 box = self.boxes[item.addr]
                 if isinstance(box, bytearray):
                     out.append(bytes(box).decode("utf-8", errors="replace"))
+                    continue
+                active.add(item.addr)
+                todo.append(("leave", item.addr))
+                if isinstance(box, Sexp):
+                    chain = []
+                    seen = set(active)
+                    cursor = item
+                    while is_ptr(cursor):
+                        part = self.boxes[cursor.addr]
+                        if not isinstance(part, Sexp):
+                            break
+                        if part.tag == "nil" and not part.items:
+                            break
+                        if part.tag != "cons" or len(part.items) != 2:
+                            break
+                        chain.append(part.items[0])
+                        cursor = part.items[1]
+                        if is_ptr(cursor) and cursor.addr in seen:
+                            break
+                        if is_ptr(cursor):
+                            seen.add(cursor.addr)
+                    part = self.boxes[cursor.addr] if is_ptr(cursor) else None
+                    proper = isinstance(part, Sexp) and part.tag == "nil" and not part.items
+                    if proper:
+                        out.append("{")
+                        todo.append(("text", "}"))
+                        for i in range(len(chain) - 1, -1, -1):
+                            todo.append(("value", chain[i]))
+                            if i:
+                                todo.append(("text", ", "))
+                    else:
+                        out.append(box.tag)
+                        if box.items:
+                            out.append("(")
+                            todo.append(("text", ")"))
+                            for i in range(len(box.items) - 1, -1, -1):
+                                todo.append(("value", box.items[i]))
+                                if i:
+                                    todo.append(("text", ", "))
                 else:
                     out.append("[")
-                    todo.append((False, "]"))
-                    i = len(box) - 1
-                    while i >= 0:
-                        todo.append((True, box[i]))
-                        if i > 0:
-                            todo.append((False, "; "))
-                        i -= 1
+                    todo.append(("text", "]"))
+                    for i in range(len(box) - 1, -1, -1):
+                        todo.append(("value", box[i]))
+                        if i:
+                            todo.append(("text", "; "))
         return "".join(out)
 
-    def equal(self, x, y):
-        # Сравнение по содержимому. Вложенные значения разного вида не равны.
-        pairs = []
-        pairs.append((x, y))
-        while pairs:
-            a, b = pairs.pop()
-            if is_ptr(a) != is_ptr(b):
-                return False
-            if not is_ptr(a):
+    def compare(self, x, y):
+        todo = [(x, y)]
+        seen = set()
+        while todo:
+            a, b = todo.pop()
+            ka, kb = self.kind(a), self.kind(b)
+            if ka != kb:
+                return -1 if ka < kb else 1
+            if ka == INT:
                 if a != b:
-                    return False
+                    return -1 if a < b else 1
                 continue
-            box_a = self.boxes[a.addr]
-            box_b = self.boxes[b.addr]
-            if type(box_a) is not type(box_b) or len(box_a) != len(box_b):
-                return False
-            if isinstance(box_a, bytearray):
-                if box_a != box_b:
-                    return False
-            else:
-                i = 0
-                while i < len(box_a):
-                    pairs.append((box_a[i], box_b[i]))
-                    i += 1
-        return True
+            pair = (a.addr, b.addr)
+            if pair in seen:
+                continue
+            seen.add(pair)
+            a, b = self.boxes[a.addr], self.boxes[b.addr]
+            if ka == STR:
+                if a != b:
+                    return -1 if a < b else 1
+                continue
+            if ka == SEXP:
+                if a.tag != b.tag:
+                    return -1 if a.tag < b.tag else 1
+                a, b = a.items, b.items
+            todo.append((len(a), len(b)))
+            for i in range(min(len(a), len(b)) - 1, -1, -1):
+                todo.append((a[i], b[i]))
+        return 0
+
+    def equal(self, x, y):
+        return self.compare(x, y) == 0
 
     def binop(self, code, x, y):
+        if code == CONS:
+            return self.new_sexp("cons", [x, y])
+        if code in (EQ, NE, LT, LE, GT, GE):
+            order = self.compare(x, y)
+            return int((order == 0 if code == EQ else
+                        order != 0 if code == NE else
+                        order < 0 if code == LT else
+                        order <= 0 if code == LE else
+                        order > 0 if code == GT else order >= 0))
         if not is_ptr(x) and not is_ptr(y):
             return apply_binop(code, x, y)
-        if code == EQ or code == NE:
-            if self.kind(x) != self.kind(y):
-                name = "=" if code == EQ else "<>"
-                raise L0Error('ERROR: binary operator "%s" is applied to %s and %s'
-                              % (name, self.show(x), self.show(y)))
-            same = self.equal(x, y)
-            return 1 if same == (code == EQ) else 0
-        if (code == LT or code == LE or code == GT or code == GE) \
-                and self.kind(x) == STR and self.kind(y) == STR:
-            a = bytes(self.boxes[x.addr])
-            b = bytes(self.boxes[y.addr])
-            if code == LT:
-                return 1 if a < b else 0
-            if code == LE:
-                return 1 if a <= b else 0
-            if code == GT:
-                return 1 if a > b else 0
-            return 1 if a >= b else 0
-        # Правый операнд проверяется первым.
         self.as_int(y)
         self.as_int(x)

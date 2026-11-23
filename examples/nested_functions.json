@@ -1,0 +1,92 @@
+{
+  "scope": {
+    "functions": [
+      {
+        "name": "foo",
+        "params": [
+          "x"
+        ],
+        "body": {
+          "scope": {
+            "vars": [
+              "y"
+            ],
+            "functions": [
+              {
+                "name": "bar",
+                "params": [
+                  "z"
+                ],
+                "body": {
+                  "seq": {
+                    "left": {
+                      "assn": {
+                        "dst": "y",
+                        "src": {
+                          "binop": "+",
+                          "left": {
+                            "var": "y"
+                          },
+                          "right": {
+                            "var": "z"
+                          }
+                        }
+                      }
+                    },
+                    "right": {
+                      "return": {
+                        "var": "y"
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "body": {
+              "seq": {
+                "left": {
+                  "assn": {
+                    "dst": "y",
+                    "src": {
+                      "const": 3
+                    }
+                  }
+                },
+                "right": {
+                  "return": {
+                    "binop": "+",
+                    "left": {
+                      "call": {
+                        "name": "bar",
+                        "args": [
+                          {
+                            "var": "x"
+                          }
+                        ]
+                      }
+                    },
+                    "right": {
+                      "var": "y"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "body": {
+      "write": {
+        "call": {
+          "name": "foo",
+          "args": [
+            {
+              "const": 1
+            }
+          ]
+        }
+      }
+    }
+  }
+}

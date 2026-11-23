@@ -1,0 +1,14 @@
+{
+  read (list);
+
+  cont = 1;
+  rev = {};
+
+  while (list != {}) {
+    switch (list) {
+      case h : tl -> rev = h : rev; list = tl   
+    }
+  }
+
+  write (rev)
+}

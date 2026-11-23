@@ -1,18 +1,13 @@
-# Перевод JSON-значений (dict, str, int) в узлы AST без рекурсии.
-#
-# Явный стек задач двух видов:
-#   VISIT - разобрать JSON-узел. Лист сразу превращается в узел AST,
-#           составной узел кладёт BUILD и VISIT своих детей.
-#   BUILD - дети уже построены и лежат на стеке результатов: снять их и собрать узел.
 
 from .arith import normalize_op, op_code
-from .ast_nodes import (ArrayLit, Assign, BinOp, Const, DoWhile, Elem, If, Length, Read, Seq, SetElem,
-                        Skip, StrLit, Var, While, Write)
+from .ast_nodes import (ArrayLit, Assign, BinOp, Call, Const, DoWhile, Elem, Function, If, Length,
+                        Pattern, Read, Return, Scope, Seq, SetElem, SexpLit, Skip, StrLit,
+                        Switch, Var, While, Write)
 from .errors import AstError
 
 VISIT, BUILD = 0, 1
 STRING_KEY = "string"
-EXPR, STMT = 0, 1
+EXPR, STMT, PATTERN = 0, 1, 2
 
 
 def describe(value):
@@ -36,6 +31,19 @@ def name_field(obj, key, what):
     return name
 
 
+def names_list(value, what):
+    if not isinstance(value, list):
+        raise AstError("%s: list of names expected" % what)
+    seen = set()
+    for name in value:
+        if not isinstance(name, str) or not name:
+            raise AstError("%s: nonempty name expected" % what)
+        if name in seen:
+            raise AstError('%s: duplicate name "%s"' % (what, name))
+        seen.add(name)
+    return value
+
+
 def visit_expr(e, tasks, results):
     if not isinstance(e, dict):
         raise AstError("expression expected, got " + describe(e))
@@ -44,6 +52,11 @@ def visit_expr(e, tasks, results):
         if not isinstance(n, int) or isinstance(n, bool):
             raise AstError("const: integer expected, got " + describe(n))
         results.append(Const(n))
+    elif "char" in e:
+        char = e["char"]
+        if not isinstance(char, str) or len(char.encode("utf-8")) != 1:
+            raise AstError("char: single-byte character expected")
+        results.append(Const(char.encode("utf-8")[0]))
     elif "var" in e:
         results.append(Var(name_field(e, "var", "var")))
     elif "binop" in e:
@@ -53,15 +66,37 @@ def visit_expr(e, tasks, results):
         op = normalize_op(op)
         if op_code(op) < 0:
             raise AstError('unknown binop "%s"' % op)
-        # Порядок обратный: сначала разберётся left, потом right, потом сборка.
         tasks.append((BUILD, "binop", op))
         tasks.append((VISIT, EXPR, field(e, "right", "binop")))
         tasks.append((VISIT, EXPR, field(e, "left", "binop")))
+    elif "call" in e:
+        node = e["call"]
+        name = name_field(node, "name", "call")
+        args = field(node, "args", "call")
+        if not isinstance(args, list):
+            raise AstError("call: list of arguments expected")
+        tasks.append((BUILD, "call", (name, len(args))))
+        for item in reversed(args):
+            tasks.append((VISIT, EXPR, item))
+    elif "sexp" in e or "list" in e:
+        if "sexp" in e:
+            node = e["sexp"]
+            tag = name_field(node, "tag", "sexp")
+            items = field(node, "args", "sexp")
+            kind = "sexp"
+        else:
+            tag = None
+            items = e["list"]
+            kind = "list"
+        if not isinstance(items, list):
+            raise AstError("%s: list of expressions expected" % kind)
+        tasks.append((BUILD, kind, (tag, len(items))))
+        for item in reversed(items):
+            tasks.append((VISIT, EXPR, item))
     elif "array" in e:
         items = e["array"]
         if not isinstance(items, list):
             raise AstError("array: list of expressions expected, got " + describe(items))
-        # Порядок обратный: первый элемент снимется со стека задач первым.
         tasks.append((BUILD, "array", len(items)))
         i = len(items) - 1
         while i >= 0:
@@ -116,6 +151,40 @@ def visit_stmt(s, tasks, results):
         tasks.append((VISIT, EXPR, field(node, "value", "set")))
         tasks.append((VISIT, EXPR, field(node, "idx", "set")))
         tasks.append((VISIT, EXPR, field(node, "dst", "set")))
+    elif "return" in s:
+        tasks.append((BUILD, "return", None))
+        tasks.append((VISIT, EXPR, s["return"]))
+    elif "scope" in s:
+        node = s["scope"]
+        if not isinstance(node, dict):
+            raise AstError("scope: object expected")
+        variables = names_list(node.get("vars", []), "scope vars")
+        functions = node.get("functions", [])
+        if not isinstance(functions, list):
+            raise AstError("scope: list of functions expected")
+        declarations = []
+        seen = set()
+        for function in functions:
+            name = name_field(function, "name", "function")
+            if name in seen:
+                raise AstError('scope: duplicate function "%s"' % name)
+            seen.add(name)
+            params = names_list(field(function, "params", "function"), "function params")
+            declarations.append((name, params, field(function, "body", "function")))
+        tasks.append((BUILD, "scope", (variables, [(name, params) for name, params, _ in declarations])))
+        tasks.append((VISIT, STMT, field(node, "body", "scope")))
+        for _, _, body in reversed(declarations):
+            tasks.append((VISIT, STMT, body))
+    elif "switch" in s:
+        node = s["switch"]
+        branches = field(node, "branches", "switch")
+        if not isinstance(branches, list) or not branches:
+            raise AstError("switch: nonempty list of branches expected")
+        tasks.append((BUILD, "switch", len(branches)))
+        for branch in reversed(branches):
+            tasks.append((VISIT, STMT, field(branch, "body", "branch")))
+            tasks.append((VISIT, PATTERN, field(branch, "pattern", "branch")))
+        tasks.append((VISIT, EXPR, field(node, "expr", "switch")))
     elif "while" in s:
         node = s["while"]
         tasks.append((BUILD, "while", None))
@@ -130,9 +199,99 @@ def visit_stmt(s, tasks, results):
         raise AstError("unknown statement: " + describe(s))
 
 
+def visit_pattern(p, tasks, results):
+    if p == "_":
+        results.append(Pattern("wildcard"))
+        return
+    if not isinstance(p, dict) or len(p) != 1:
+        raise AstError("pattern expected, got " + describe(p))
+    kind, value = next(iter(p.items()))
+    if kind == "var":
+        results.append(Pattern("var", name_field(p, "var", "pattern")))
+    elif kind == "const":
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise AstError("pattern: integer expected")
+        results.append(Pattern("const", value))
+    elif kind in ("string", "char"):
+        if not isinstance(value, str) or (kind == "char" and len(value.encode("utf-8")) != 1):
+            raise AstError("pattern: invalid %s" % kind)
+        results.append(Pattern(kind, value))
+    elif kind == "type":
+        if value not in ("int", "string", "array", "sexp"):
+            raise AstError("pattern: unknown type")
+        results.append(Pattern(kind, value))
+    elif kind == "as":
+        name = name_field(value, "name", "pattern as")
+        tasks.append((BUILD, "pattern", (kind, name, 1)))
+        tasks.append((VISIT, PATTERN, field(value, "pattern", "pattern as")))
+    elif kind in ("array", "list", "sexp", "cons"):
+        tag = None
+        if kind == "sexp":
+            tag = name_field(value, "tag", "pattern sexp")
+            items = field(value, "args", "pattern sexp")
+        else:
+            items = value
+        if not isinstance(items, list) or (kind == "cons" and len(items) != 2):
+            raise AstError("pattern %s: invalid items" % kind)
+        tasks.append((BUILD, "pattern", (kind, tag, len(items))))
+        for item in reversed(items):
+            tasks.append((VISIT, PATTERN, item))
+    else:
+        raise AstError("unknown pattern: " + kind)
+
+
 def build(kind, arg, results):
-    # Дети сняты в порядке, обратном тому, в каком их строили.
-    if kind == "binop":
+    if kind == "call":
+        name, count = arg
+        args = results[-count:] if count else []
+        if count:
+            del results[-count:]
+        results.append(Call(name, args))
+    elif kind == "scope":
+        variables, declarations = arg
+        body = results.pop()
+        count = len(declarations)
+        bodies = results[-count:] if count else []
+        if count:
+            del results[-count:]
+        functions = [Function(name, params, fn_body)
+                     for (name, params), fn_body in zip(declarations, bodies)]
+        results.append(Scope(variables, functions, body))
+    elif kind == "return":
+        results.append(Return(results.pop()))
+    elif kind in ("sexp", "list"):
+        tag, count = arg
+        items = results[-count:] if count else []
+        if count:
+            del results[-count:]
+        if kind == "sexp":
+            results.append(SexpLit(tag, items))
+        else:
+            result = SexpLit("nil", [])
+            for item in reversed(items):
+                result = SexpLit("cons", [item, result])
+            results.append(result)
+    elif kind == "pattern":
+        pattern_kind, value, count = arg
+        items = results[-count:] if count else []
+        if count:
+            del results[-count:]
+        if pattern_kind == "list":
+            result = Pattern("sexp", "nil")
+            for item in reversed(items):
+                result = Pattern("cons", items=[item, result])
+            results.append(result)
+        else:
+            results.append(Pattern(pattern_kind, value, items))
+    elif kind == "switch":
+        branches = []
+        for i in range(arg):
+            body = results.pop()
+            pattern = results.pop()
+            branches.append((pattern, body))
+        branches.reverse()
+        results.append(Switch(results.pop(), branches))
+    elif kind == "binop":
         right = results.pop()
         left = results.pop()
         results.append(BinOp(arg, op_code(arg), left, right))
@@ -185,8 +344,10 @@ def build_program(value):
         if action == VISIT:
             if kind == EXPR:
                 visit_expr(arg, tasks, results)
-            else:
+            elif kind == STMT:
                 visit_stmt(arg, tasks, results)
+            else:
+                visit_pattern(arg, tasks, results)
         else:
             build(kind, arg, results)
     return results.pop()

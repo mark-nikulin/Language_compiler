@@ -1,0 +1,171 @@
+{
+  "scope": {
+    "functions": [
+      {
+        "name": "eval",
+        "params": [
+          "expr"
+        ],
+        "body": {
+          "switch": {
+            "expr": {
+              "var": "expr"
+            },
+            "branches": [
+              {
+                "pattern": {
+                  "sexp": {
+                    "tag": "Num",
+                    "args": [
+                      {
+                        "var": "n"
+                      }
+                    ]
+                  }
+                },
+                "body": {
+                  "return": {
+                    "var": "n"
+                  }
+                }
+              },
+              {
+                "pattern": {
+                  "sexp": {
+                    "tag": "Add",
+                    "args": [
+                      {
+                        "var": "left"
+                      },
+                      {
+                        "var": "right"
+                      }
+                    ]
+                  }
+                },
+                "body": {
+                  "return": {
+                    "binop": "+",
+                    "left": {
+                      "call": {
+                        "name": "eval",
+                        "args": [
+                          {
+                            "var": "left"
+                          }
+                        ]
+                      }
+                    },
+                    "right": {
+                      "call": {
+                        "name": "eval",
+                        "args": [
+                          {
+                            "var": "right"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "pattern": {
+                  "sexp": {
+                    "tag": "Mul",
+                    "args": [
+                      {
+                        "var": "left"
+                      },
+                      {
+                        "var": "right"
+                      }
+                    ]
+                  }
+                },
+                "body": {
+                  "return": {
+                    "binop": "*",
+                    "left": {
+                      "call": {
+                        "name": "eval",
+                        "args": [
+                          {
+                            "var": "left"
+                          }
+                        ]
+                      }
+                    },
+                    "right": {
+                      "call": {
+                        "name": "eval",
+                        "args": [
+                          {
+                            "var": "right"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "body": {
+      "write": {
+        "call": {
+          "name": "eval",
+          "args": [
+            {
+              "sexp": {
+                "tag": "Add",
+                "args": [
+                  {
+                    "sexp": {
+                      "tag": "Num",
+                      "args": [
+                        {
+                          "const": 2
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "sexp": {
+                      "tag": "Mul",
+                      "args": [
+                        {
+                          "sexp": {
+                            "tag": "Num",
+                            "args": [
+                              {
+                                "const": 3
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "sexp": {
+                            "tag": "Num",
+                            "args": [
+                              {
+                                "const": 8
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

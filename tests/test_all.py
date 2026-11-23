@@ -1,6 +1,3 @@
-# Тесты: каждая программа идёт двумя путями (AST-интерпретатор и SM),
-# результаты должны совпасть между собой и с ожидаемым.
-# Запуск: python3 -m unittest discover tests   (или python3 tests/test_all.py)
 
 import os
 import subprocess
@@ -12,15 +9,15 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from l0.assembler import assemble  # noqa: E402
-from l0.ast_builder import build_program  # noqa: E402
-from l0.ast_interp import run_ast  # noqa: E402
-from l0.compiler import compile_program  # noqa: E402
-from l0.errors import AsmError, AstError, JsonError, SmError  # noqa: E402
-from l0.json_reader import parse_json  # noqa: E402
-from l0.opcodes import Opcode, format_instr, format_program, parse_sm  # noqa: E402
-from l0.sm import run_sm  # noqa: E402
-from l0.sm_json import format_program_json, parse_sm_any, parse_sm_json  # noqa: E402
+from l0.assembler import assemble
+from l0.ast_builder import build_program
+from l0.ast_interp import run_ast
+from l0.compiler import compile_program
+from l0.errors import AsmError, AstError, JsonError, SmError
+from l0.json_reader import parse_json
+from l0.opcodes import Opcode, format_instr, format_program, parse_sm
+from l0.sm import run_sm
+from l0.sm_json import format_program_json, parse_sm_any, parse_sm_json
 
 MAIN = os.path.join(ROOT, "main.py")
 
@@ -51,7 +48,6 @@ def run_both(ast_json, text):
 
 
 def normalize_labels(lines):
-    # Метки переименовываются в L0, L1, ... по порядку первого появления.
     names = []
     result = []
     for line in lines:
@@ -70,7 +66,6 @@ ELIF = seq(R("a"), IF(B("==", V("a"), C(1)), W(C(10)),
                       IF(B("==", V("a"), C(2)), W(C(20)), W(C(30)))))
 
 CASES = [
-    # (имя, AST, ввод, ожидаемый вывод, ожидаемое сообщение)
     ("sum 1, 3", SUM, "1, 3", [4], None),
     ("sum 1,3", SUM, "1,3", [4], None),
     ("sum 1,      3", SUM, "1,      3", [4], None),
@@ -138,14 +133,12 @@ class TestPrograms(unittest.TestCase):
         self.assertEqual(by_ast, by_sm)
 
     def test_while_label_names(self):
-        # У тела и условия одного while разные номера.
         code = compile_program(build_program(SM_WHILE))
         lines = [format_instr(i) for i in code]
         self.assertEqual(lines[2:4], ["JMP L_while_cond_1", "LABEL L_while_body_0"])
         self.assertEqual(lines[-1], "JNZ L_while_body_0")
 
     def test_program_from_text(self):
-        # Готовая программа в текстовом формате SM, с нестандартным именем метки ("cody").
         text = """CONST 0
 ST x
 JMP L_while_cond_3
@@ -167,7 +160,6 @@ JNZ L_while_cody_2
     def test_if_code(self):
         code = compile_program(build_program(NEG))
         lines = normalize_labels([format_instr(i) for i in code])
-        # Без else: переход сразу на выход, лишних меток и JMP нет.
         self.assertEqual(lines, ["READ", "ST n", "LD n", "CONST 0", "BINOP <", "JZ L0",
                                  "CONST 0", "CONST 1", "BINOP -", "WRITE", "LABEL L0"])
 
@@ -178,12 +170,10 @@ JNZ L_while_cody_2
                                  "JMP L1", "LABEL L0", "CONST 2", "WRITE", "LABEL L1"])
 
     def test_unused_exit_has_no_label(self):
-        # Ни один переход не ведёт на выход: меток нет совсем.
         code = compile_program(build_program(seq(W(C(1)), W(C(2)))))
         self.assertEqual([format_instr(i) for i in code], ["CONST 1", "WRITE", "CONST 2", "WRITE"])
 
     def test_nested_if_jumps_to_outer_exit(self):
-        # Вложенный if в конце ветки прыгает прямо на общий выход, без цепочки переходов.
         inner = IF(B("<", V("n"), C(5)), W(C(1)))
         code = compile_program(build_program(IF(B("<", V("n"), C(10)), inner, W(C(2)))))
         lines = [format_instr(i) for i in code]
@@ -195,7 +185,6 @@ JNZ L_while_cody_2
         self.assertEqual(len([l for l in lines if l.startswith("LABEL")]), 2)
 
     def test_exit_labels_run_equally(self):
-        # if без else в хвосте тела цикла, в else и в середине последовательности
         tail = IF(B("<", V("x"), C(2)), W(V("x")))
         loop = seq(A("x", C(0)), WHILE(B("<", V("x"), C(4)),
                                        seq(IF(B("==", V("x"), C(1)), W(C(100)), tail),
@@ -221,7 +210,6 @@ JNZ L_while_cody_2
                 self.assertEqual(run_sm(assemble(again), text), run_sm(assemble(code), text))
 
 
-# Пары "AST -> SM-код"
 PLAYGROUND = [
     ({"seq": {"left": {"read": "a"}, "right": {"seq": {"left": {"read": "b"}, "right": {
         "write": {"binop": "+", "left": {"var": "a"}, "right": {"var": "b"}}}}}}},
@@ -273,7 +261,6 @@ def SET(d, i, v): return {"set": {"dst": d, "idx": i, "value": v}}
 ABC = A("s", STR("abc"))
 
 ARRAY_CASES = [
-    # (имя, AST, ожидаемый вывод, ожидаемое сообщение)
     ("playground", seq(A("a", ARR(C(1), C(2), C(3))), W(ELEM(V("a"), C(1))), W(LEN(V("a")))),
      [2, 3], None),
     ("nested", seq(A("a", ARR(ARR(C(1), C(2)), ARR(B("+", C(1), C(2))))),
@@ -324,10 +311,8 @@ ARRAY_CASES = [
     ("string store array", seq(ABC, SET(V("s"), C(0), ARR(C(1)))), [],
      'ERROR: integer value expected but "[1]" given'),
     ("string store range", seq(ABC, SET(V("s"), C(0), C(300))), [], 'Invalid_argument("Char.chr")'),
-    ("eq int and array", W(B("==", C(1), ARR(C(1)))), [],
-     'ERROR: binary operator "=" is applied to 1 and [1]'),
-    ("eq string and array", W(B("==", STR("ab"), ARR(C(97), C(98)))), [],
-     'ERROR: binary operator "=" is applied to ab and [97; 98]'),
+    ("eq int and array", W(B("==", C(1), ARR(C(1)))), [0], None),
+    ("eq string and array", W(B("==", STR("ab"), ARR(C(97), C(98)))), [0], None),
 ]
 
 
@@ -420,18 +405,15 @@ N = 100000
 
 
 def deep_seq_text(n):
-    # {"seq":{"left":W,"right":{"seq":...}}} - текст собирается повторением строк, без рекурсии
     write = '{"write":{"const":1}}'
     return '{"seq":{"left":%s,"right":' % write * n + write + "}}" * n
 
 
 def deep_left_sum_text(n):
-    # ((1+1)+1)+...
     return '{"binop":"+","left":' * n + '{"const":1}' + ',"right":{"const":1}}' * n
 
 
 def deep_right_sum_text(n):
-    # 1+(1+(1+...))
     return '{"binop":"+","left":{"const":1},"right":' * n + '{"const":1}' + "}" * n
 
 
